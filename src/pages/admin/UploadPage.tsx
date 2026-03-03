@@ -67,7 +67,21 @@ export function UploadPage() {
     const storageRef = ref(storage, path);
     const uploadTask = uploadBytesResumable(storageRef, file);
 
-    return new Promise((resolve, reject) => {
+return new Promise((resolve, reject) => {
+      uploadTask.on(
+        'state_changed',
+        (snapshot: any) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          setUploadTasks((prev) =>
+            prev.map((t) =>
+              t.file.name === file.name ? { ...t, progress, status: 'uploading' } : t
+            )
+          );
+        },
+        (error: any) => {
+          console.error('Upload failed:', error);
+          reject(error);
+        },
       uploadTask.on(
         'state_changed',
         (snapshot) => {

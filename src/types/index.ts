@@ -60,5 +60,13 @@ export interface UploadTask {
   file: File;
   progress: number;
   status: 'pending' | 'uploading' | 'processing' | 'completed' | 'error';
+  videoUrl?: string;
+  video?: Video;
+}
+export interface UploadTask {
+  id: string;
+  file: File;
+  progress: number;
+  status: 'pending' | 'uploading' | 'processing' | 'completed' | 'error';
   video?: Video;
 }
