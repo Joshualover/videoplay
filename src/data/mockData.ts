@@ -1,6 +1,6 @@
 import type { Video, Tag, User } from '@/types';
 
-export const mockVideos: Video[] = [
+export const mockVideos: Video[] = [];
   {
     id: '1',
     title: '城市夜景航拍 - 上海外滩',
@@ -172,7 +172,7 @@ export const mockVideos: Video[] = [
   }
 ];
 
-export const mockTags: Tag[] = [
+export const mockTags: Tag[] = [];
   { id: '1', name: '航拍', color: '#d4acfe', usageCount: 15 },
   { id: '2', name: '美食', color: '#ff4081', usageCount: 23 },
   { id: '3', name: '教程', color: '#4caf50', usageCount: 45 },
@@ -189,7 +189,9 @@ export const mockTags: Tag[] = [
   { id: '14', name: '搞笑', color: '#ffeb3b', usageCount: 19 }
 ];
 
-export const mockUser: User = {
+export const mockUser: User | null = null;
+
+// 本地存储键名
   id: '1',
   name: '管理员',
   avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop',
@@ -207,6 +209,9 @@ export const STORAGE_KEYS = {
 
 // 初始化本地存储
 export function initializeStorage(): void {
+  // 不再预置数据
+}
+export function initializeStorage(): void {
   if (!localStorage.getItem(STORAGE_KEYS.VIDEOS)) {
     localStorage.setItem(STORAGE_KEYS.VIDEOS, JSON.stringify(mockVideos));
   }
@@ -219,6 +224,10 @@ export function initializeStorage(): void {
 }
 
 // 获取视频列表
+export function getVideos(): Video[] {
+  const data = localStorage.getItem(STORAGE_KEYS.VIDEOS);
+  return data ? JSON.parse(data) : [];
+}
 export function getVideos(): Video[] {
   const data = localStorage.getItem(STORAGE_KEYS.VIDEOS);
   return data ? JSON.parse(data) : mockVideos;
@@ -250,6 +259,10 @@ export function deleteVideo(id: string): void {
 }
 
 // 获取标签列表
+export function getTags(): Tag[] {
+  const data = localStorage.getItem(STORAGE_KEYS.TAGS);
+  return data ? JSON.parse(data) : [];
+}
 export function getTags(): Tag[] {
   const data = localStorage.getItem(STORAGE_KEYS.TAGS);
   return data ? JSON.parse(data) : mockTags;
