@@ -62,7 +62,33 @@ export function UploadPage() {
     []
   );
 
-  // Upload to Firebase Storage
+// Upload to Firebase Storage
+  const uploadToFirebase = async (file: File, path: string): Promise<string> => {
+    const storageRef = ref(storage, path);
+    const uploadTask = uploadBytesResumable(storageRef, file);
+
+    return new Promise((resolve, reject) => {
+      uploadTask.on(
+        'state_changed',
+        (snapshot: any) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          setUploadTasks((prev) =>
+            prev.map((t) =>
+              t.file.name === file.name ? { ...t, progress, status: 'uploading' } : t
+            )
+          );
+        },
+        (error: any) => {
+          console.error('Upload failed:', error);
+          reject(error);
+        },
+        async () => {
+          const url = await getDownloadURL(uploadTask.snapshot.ref);
+          resolve(url);
+        }
+      );
+    });
+  };
   const uploadToFirebase = async (file: File, path: string): Promise<string> => {
     const storageRef = ref(storage, path);
     const uploadTask = uploadBytesResumable(storageRef, file);
