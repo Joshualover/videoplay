@@ -9,6 +9,8 @@ import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn, generateId, formatFileSize } from '@/lib/utils';
 import { getTags, saveVideo } from '@/data/mockData';
+import { storage } from '@/lib/firebase';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import type { Video, UploadTask } from '@/types';
 
 export function UploadPage() {
@@ -23,6 +25,7 @@ export function UploadPage() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [newTag, setNewTag] = useState('');
   const [thumbnail, setThumbnail] = useState<string>('');
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [visibility, setVisibility] = useState<'public' | 'private'>('public');
 
   const availableTags = getTags().map((t) => t.name);
@@ -59,6 +62,34 @@ export function UploadPage() {
     []
   );
 
+  // Upload to Firebase Storage
+  const uploadToFirebase = async (file: File, path: string): Promise<string> => {
+    const storageRef = ref(storage, path);
+    const uploadTask = uploadBytesResumable(storageRef, file);
+
+    return new Promise((resolve, reject) => {
+      uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          setUploadTasks((prev) =>
+            prev.map((t) =>
+              t.file.name === file.name ? { ...t, progress, status: 'uploading' } : t
+            )
+          );
+        },
+        (error) => {
+          console.error('Upload failed:', error);
+          reject(error);
+        },
+        async () => {
+          const url = await getDownloadURL(uploadTask.snapshot.ref);
+          resolve(url);
+        }
+      );
+    });
+  };
+
   const addUploadTask = async (file: File) => {
     const task: UploadTask = {
       id: generateId(),
@@ -69,40 +100,30 @@ export function UploadPage() {
 
     setUploadTasks((prev) => [...prev, task]);
 
-    // 模拟上传进度
-    simulateUpload(task.id);
-  };
+    try {
+      // Upload video to Firebase
+      const videoPath = `videos/${Date.now()}_${file.name}`;
+      const videoUrl = await uploadToFirebase(file, videoPath);
 
-  const simulateUpload = (taskId: string) => {
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += Math.random() * 15;
-      if (progress >= 100) {
-        progress = 100;
-        clearInterval(interval);
+      setUploadTasks((prev) =>
+        prev.map((t) =>
+          t.file.name === file.name
+            ? { ...t, progress: 100, status: 'completed', videoUrl }
+            : t
+        )
+      );
 
-        setUploadTasks((prev) =>
-          prev.map((t) =>
-            t.id === taskId
-              ? { ...t, progress: 100, status: 'completed' }
-              : t
-          )
-        );
-
-        // 自动打开编辑表单
-        const task = uploadTasks.find((t) => t.id === taskId);
-        if (task) {
-          setEditingTask({ ...task, progress: 100, status: 'completed' });
-          setTitle(task.file.name.replace(/\.[^/.]+$/, ''));
-        }
-      } else {
-        setUploadTasks((prev) =>
-          prev.map((t) =>
-            t.id === taskId ? { ...t, progress, status: 'uploading' } : t
-          )
-        );
-      }
-    }, 300);
+      // Open edit form
+      setEditingTask({ ...task, progress: 100, status: 'completed', videoUrl });
+      setTitle(file.name.replace(/\.[^/.]+$/, ''));
+    } catch (error) {
+      console.error('Upload failed:', error);
+      setUploadTasks((prev) =>
+        prev.map((t) =>
+          t.file.name === file.name ? { ...t, status: 'error' } : t
+        )
+      );
+    }
   };
 
   const removeTask = (taskId: string) => {
@@ -119,14 +140,14 @@ export function UploadPage() {
     setSelectedTags([]);
     setNewTag('');
     setThumbnail('');
+    setThumbnailFile(null);
     setVisibility('public');
   };
 
   const handleThumbnailCapture = async (task: UploadTask) => {
-    // 创建视频元素来捕获帧
     const video = document.createElement('video');
     video.src = URL.createObjectURL(task.file);
-    video.currentTime = 5; // 第5秒
+    video.currentTime = 5;
 
     video.addEventListener('loadeddata', () => {
       const canvas = document.createElement('canvas');
@@ -135,7 +156,13 @@ export function UploadPage() {
       const ctx = canvas.getContext('2d');
       if (ctx) {
         ctx.drawImage(video, 0, 0);
-        setThumbnail(canvas.toDataURL('image/jpeg', 0.8));
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const file = new File([blob], 'thumbnail.jpg', { type: 'image/jpeg' });
+            setThumbnailFile(file);
+            setThumbnail(URL.createObjectURL(blob));
+          }
+        }, 'image/jpeg', 0.8);
       }
       URL.revokeObjectURL(video.src);
     });
@@ -146,38 +173,44 @@ export function UploadPage() {
   const handleSaveVideo = async () => {
     if (!editingTask) return;
 
-    // 获取视频时长
+    let finalThumbnailUrl = thumbnail || 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=800&h=450&fit=crop';
+    let finalVideoUrl = (editingTask as any).videoUrl || '';
+
+    // Upload thumbnail if it's a new capture
+    if (thumbnailFile) {
+      try {
+        const thumbPath = `thumbnails/${Date.now()}_${thumbnailFile.name}`;
+        finalThumbnailUrl = await uploadToFirebase(thumbnailFile, thumbPath);
+      } catch (error) {
+        console.error('Thumbnail upload failed:', error);
+      }
+    }
+
+    // Get video duration
     const video = document.createElement('video');
-    video.src = URL.createObjectURL(editingTask.file);
+    video.src = finalVideoUrl;
 
     video.addEventListener('loadedmetadata', () => {
       const newVideo: Video = {
         id: generateId(),
         title: title || editingTask.file.name,
         description,
-        thumbnailUrl:
-          thumbnail ||
-          'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=800&h=450&fit=crop',
-        videoUrl: video.src, // 在实际应用中，这应该是上传后的URL
+        thumbnailUrl: finalThumbnailUrl,
+        videoUrl: finalVideoUrl,
         duration: video.duration,
         fileSize: editingTask.file.size,
         tags: selectedTags,
         uploadTime: new Date().toISOString(),
-        publishTime:
-          visibility === 'public' ? new Date().toISOString() : undefined,
+        publishTime: visibility === 'public' ? new Date().toISOString() : undefined,
         status: visibility === 'public' ? 'published' : 'private',
         viewCount: 0,
       };
 
       saveVideo(newVideo);
-
-      // 清除任务
       removeTask(editingTask.id);
       setEditingTask(null);
       resetForm();
     });
-
-    video.load();
   };
 
   const toggleTag = (tag: string) => {
@@ -274,6 +307,8 @@ export function UploadPage() {
                       >
                         编辑信息
                       </Button>
+                    ) : task.status === 'error' ? (
+                      <span className="text-sm text-red-500">上传失败</span>
                     ) : (
                       <span className="text-sm text-[#666666]">
                         {Math.round(task.progress)}%
