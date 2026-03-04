@@ -12,8 +12,7 @@ import { getTags, saveVideo } from '@/data/mockData';
 import { storage } from '@/lib/firebase';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import type { Video, UploadTask } from '@/types';
-import { getTags, saveVideo } from '@/data/mockData';
-import type { Video, UploadTask } from '@/types';
+
 
 export function UploadPage() {
   const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
@@ -25,10 +24,9 @@ export function UploadPage() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [newTag, setNewTag] = useState('');
   const [thumbnail, setThumbnail] = useState<string>('');
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
-  const [visibility, setVisibility] = useState<'public' | 'private'>('public');
-  const [thumbnail, setThumbnail] = useState<string>('');
   const [visibility, setVisibility] = useState<'public' | 'private'>('public');
 
   const availableTags = getTags().map((t) => t.name);
@@ -63,7 +61,7 @@ export function UploadPage() {
       files.forEach((file) => addUploadTask(file));
     },
     []
-  );
+);
 
   // Upload to Firebase Storage
   const uploadToFirebase = async (file: File, path: string): Promise<string> => {
@@ -106,16 +104,15 @@ export function UploadPage() {
     try {
       const videoPath = `videos/${Date.now()}_${file.name}`;
       const videoUrl = await uploadToFirebase(file, videoPath);
-
       setUploadTasks((prev) =>
         prev.map((t) =>
           t.file.name === file.name
-            ? { ...t, progress: 100, status: 'completed', videoUrl }
+            ? { ...t, progress: 100, status: 'completed', videoUrl: videoUrl }
             : t
         )
       );
 
-      setEditingTask({ ...task, progress: 100, status: 'completed', videoUrl });
+      setEditingTask({ ...task, progress: 100, status: 'completed', videoUrl: videoUrl });
       setTitle(file.name.replace(/\.[^/.]+$/, ''));
     } catch (error) {
       console.error('Upload failed:', error);
@@ -126,51 +123,6 @@ export function UploadPage() {
       );
     }
   };
-    const task: UploadTask = {
-      id: generateId(),
-      file,
-      progress: 0,
-      status: 'pending',
-    };
-
-setUploadTasks((prev) => [...prev, task]);
-  };
-
-    // 模拟上传进度
-    simulateUpload(task.id);
-  };
-
-  const simulateUpload = (taskId: string) => {
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += Math.random() * 15;
-      if (progress >= 100) {
-        progress = 100;
-        clearInterval(interval);
-
-        setUploadTasks((prev) =>
-          prev.map((t) =>
-            t.id === taskId
-              ? { ...t, progress: 100, status: 'completed' }
-              : t
-          )
-        );
-
-        // 自动打开编辑表单
-        const task = uploadTasks.find((t) => t.id === taskId);
-        if (task) {
-          setEditingTask({ ...task, progress: 100, status: 'completed' });
-          setTitle(task.file.name.replace(/\.[^/.]+$/, ''));
-        }
-      } else {
-        setUploadTasks((prev) =>
-          prev.map((t) =>
-            t.id === taskId ? { ...t, progress, status: 'uploading' } : t
-          )
-        );
-      }
-    }, 300);
-  };
 
   const removeTask = (taskId: string) => {
     setUploadTasks((prev) => prev.filter((t) => t.id !== taskId));
@@ -180,15 +132,7 @@ setUploadTasks((prev) => [...prev, task]);
     }
   };
 
-const resetForm = () => {
-    setTitle('');
-    setDescription('');
-    setSelectedTags([]);
-    setNewTag('');
-    setThumbnail('');
-    setThumbnailFile(null);
-    setVisibility('public');
-  };
+  const resetForm = () => {
     setTitle('');
     setDescription('');
     setSelectedTags([]);
@@ -218,50 +162,7 @@ const resetForm = () => {
     video.load();
   };
 
-const handleSaveVideo = async () => {
-    if (!editingTask) return;
-
-    let finalThumbnailUrl = thumbnail || 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=800&h=450&fit=crop';
-    let finalVideoUrl = (editingTask as any).videoUrl || '';
-
-    // Upload thumbnail if it's a new capture
-    if (thumbnailFile) {
-      try {
-        const thumbPath = `thumbnails/${Date.now()}_${thumbnailFile.name}`;
-        finalThumbnailUrl = await uploadToFirebase(thumbnailFile, thumbPath);
-      } catch (error) {
-        console.error('Thumbnail upload failed:', error);
-      }
-    }
-
-    // Get video duration
-    const video = document.createElement('video');
-    video.src = finalVideoUrl;
-
-    video.addEventListener('loadedmetadata', () => {
-      const newVideo: Video = {
-        id: generateId(),
-        title: title || editingTask.file.name,
-        description,
-        thumbnailUrl: finalThumbnailUrl,
-        videoUrl: finalVideoUrl,
-        duration: video.duration,
-        fileSize: editingTask.file.size,
-        tags: selectedTags,
-        uploadTime: new Date().toISOString(),
-        publishTime: visibility === 'public' ? new Date().toISOString() : undefined,
-        status: visibility === 'public' ? 'published' : 'private',
-        viewCount: 0,
-      };
-
-      saveVideo(newVideo);
-      removeTask(editingTask.id);
-      setEditingTask(null);
-      resetForm();
-    });
-
-    video.load();
-  };
+  const handleSaveVideo = async () => {
     if (!editingTask) return;
 
     // 获取视频时长
