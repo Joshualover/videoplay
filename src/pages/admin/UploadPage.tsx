@@ -12,6 +12,8 @@ import { getTags, saveVideo } from '@/data/mockData';
 import { storage } from '@/lib/firebase';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import type { Video, UploadTask } from '@/types';
+import { getTags, saveVideo } from '@/data/mockData';
+import type { Video, UploadTask } from '@/types';
 
 export function UploadPage() {
   const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
@@ -23,9 +25,10 @@ export function UploadPage() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [newTag, setNewTag] = useState('');
   const [thumbnail, setThumbnail] = useState<string>('');
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
+  const [visibility, setVisibility] = useState<'public' | 'private'>('public');
+  const [thumbnail, setThumbnail] = useState<string>('');
   const [visibility, setVisibility] = useState<'public' | 'private'>('public');
 
   const availableTags = getTags().map((t) => t.name);
@@ -62,7 +65,7 @@ export function UploadPage() {
     []
   );
 
-// Upload to Firebase Storage
+  // Upload to Firebase Storage
   const uploadToFirebase = async (file: File, path: string): Promise<string> => {
     const storageRef = ref(storage, path);
     const uploadTask = uploadBytesResumable(storageRef, file);
@@ -89,46 +92,6 @@ export function UploadPage() {
       );
     });
   };
-  const uploadToFirebase = async (file: File, path: string): Promise<string> => {
-    const storageRef = ref(storage, path);
-    const uploadTask = uploadBytesResumable(storageRef, file);
-
-return new Promise((resolve, reject) => {
-      uploadTask.on(
-        'state_changed',
-        (snapshot: any) => {
-          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          setUploadTasks((prev) =>
-            prev.map((t) =>
-              t.file.name === file.name ? { ...t, progress, status: 'uploading' } : t
-            )
-          );
-        },
-        (error: any) => {
-          console.error('Upload failed:', error);
-          reject(error);
-        },
-      uploadTask.on(
-        'state_changed',
-        (snapshot) => {
-          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          setUploadTasks((prev) =>
-            prev.map((t) =>
-              t.file.name === file.name ? { ...t, progress, status: 'uploading' } : t
-            )
-          );
-        },
-        (error) => {
-          console.error('Upload failed:', error);
-          reject(error);
-        },
-        async () => {
-          const url = await getDownloadURL(uploadTask.snapshot.ref);
-          resolve(url);
-        }
-      );
-    });
-  };
 
   const addUploadTask = async (file: File) => {
     const task: UploadTask = {
@@ -141,7 +104,6 @@ return new Promise((resolve, reject) => {
     setUploadTasks((prev) => [...prev, task]);
 
     try {
-      // Upload video to Firebase
       const videoPath = `videos/${Date.now()}_${file.name}`;
       const videoUrl = await uploadToFirebase(file, videoPath);
 
@@ -153,7 +115,6 @@ return new Promise((resolve, reject) => {
         )
       );
 
-      // Open edit form
       setEditingTask({ ...task, progress: 100, status: 'completed', videoUrl });
       setTitle(file.name.replace(/\.[^/.]+$/, ''));
     } catch (error) {
@@ -165,6 +126,51 @@ return new Promise((resolve, reject) => {
       );
     }
   };
+    const task: UploadTask = {
+      id: generateId(),
+      file,
+      progress: 0,
+      status: 'pending',
+    };
+
+setUploadTasks((prev) => [...prev, task]);
+  };
+
+    // 模拟上传进度
+    simulateUpload(task.id);
+  };
+
+  const simulateUpload = (taskId: string) => {
+    let progress = 0;
+    const interval = setInterval(() => {
+      progress += Math.random() * 15;
+      if (progress >= 100) {
+        progress = 100;
+        clearInterval(interval);
+
+        setUploadTasks((prev) =>
+          prev.map((t) =>
+            t.id === taskId
+              ? { ...t, progress: 100, status: 'completed' }
+              : t
+          )
+        );
+
+        // 自动打开编辑表单
+        const task = uploadTasks.find((t) => t.id === taskId);
+        if (task) {
+          setEditingTask({ ...task, progress: 100, status: 'completed' });
+          setTitle(task.file.name.replace(/\.[^/.]+$/, ''));
+        }
+      } else {
+        setUploadTasks((prev) =>
+          prev.map((t) =>
+            t.id === taskId ? { ...t, progress, status: 'uploading' } : t
+          )
+        );
+      }
+    }, 300);
+  };
 
   const removeTask = (taskId: string) => {
     setUploadTasks((prev) => prev.filter((t) => t.id !== taskId));
@@ -174,7 +180,7 @@ return new Promise((resolve, reject) => {
     }
   };
 
-  const resetForm = () => {
+const resetForm = () => {
     setTitle('');
     setDescription('');
     setSelectedTags([]);
@@ -183,11 +189,19 @@ return new Promise((resolve, reject) => {
     setThumbnailFile(null);
     setVisibility('public');
   };
+    setTitle('');
+    setDescription('');
+    setSelectedTags([]);
+    setNewTag('');
+    setThumbnail('');
+    setVisibility('public');
+  };
 
   const handleThumbnailCapture = async (task: UploadTask) => {
+    // 创建视频元素来捕获帧
     const video = document.createElement('video');
     video.src = URL.createObjectURL(task.file);
-    video.currentTime = 5;
+    video.currentTime = 5; // 第5秒
 
     video.addEventListener('loadeddata', () => {
       const canvas = document.createElement('canvas');
@@ -196,13 +210,7 @@ return new Promise((resolve, reject) => {
       const ctx = canvas.getContext('2d');
       if (ctx) {
         ctx.drawImage(video, 0, 0);
-        canvas.toBlob((blob) => {
-          if (blob) {
-            const file = new File([blob], 'thumbnail.jpg', { type: 'image/jpeg' });
-            setThumbnailFile(file);
-            setThumbnail(URL.createObjectURL(blob));
-          }
-        }, 'image/jpeg', 0.8);
+        setThumbnail(canvas.toDataURL('image/jpeg', 0.8));
       }
       URL.revokeObjectURL(video.src);
     });
@@ -210,7 +218,7 @@ return new Promise((resolve, reject) => {
     video.load();
   };
 
-  const handleSaveVideo = async () => {
+const handleSaveVideo = async () => {
     if (!editingTask) return;
 
     let finalThumbnailUrl = thumbnail || 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=800&h=450&fit=crop';
@@ -251,6 +259,43 @@ return new Promise((resolve, reject) => {
       setEditingTask(null);
       resetForm();
     });
+
+    video.load();
+  };
+    if (!editingTask) return;
+
+    // 获取视频时长
+    const video = document.createElement('video');
+    video.src = URL.createObjectURL(editingTask.file);
+
+    video.addEventListener('loadedmetadata', () => {
+      const newVideo: Video = {
+        id: generateId(),
+        title: title || editingTask.file.name,
+        description,
+        thumbnailUrl:
+          thumbnail ||
+          'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=800&h=450&fit=crop',
+        videoUrl: video.src, // 在实际应用中，这应该是上传后的URL
+        duration: video.duration,
+        fileSize: editingTask.file.size,
+        tags: selectedTags,
+        uploadTime: new Date().toISOString(),
+        publishTime:
+          visibility === 'public' ? new Date().toISOString() : undefined,
+        status: visibility === 'public' ? 'published' : 'private',
+        viewCount: 0,
+      };
+
+      saveVideo(newVideo);
+
+      // 清除任务
+      removeTask(editingTask.id);
+      setEditingTask(null);
+      resetForm();
+    });
+
+    video.load();
   };
 
   const toggleTag = (tag: string) => {
@@ -347,8 +392,6 @@ return new Promise((resolve, reject) => {
                       >
                         编辑信息
                       </Button>
-                    ) : task.status === 'error' ? (
-                      <span className="text-sm text-red-500">上传失败</span>
                     ) : (
                       <span className="text-sm text-[#666666]">
                         {Math.round(task.progress)}%
